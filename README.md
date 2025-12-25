@@ -1,103 +1,259 @@
-4番（別UIを足す）っていうのは、同じ「天気エンジン（webhook）」を使い回して、入口だけ増やすイメージです。
-いまは入口が ブラウザUI（ui）だけですが、入口を増やすと「操作方法が増える」＝使える場面が増えます。中身は同じなので、作りやすいです。 
+## README.md（Markdown整形版・1ページ）
+
+````md
+# Weather Console (Flask + OpenWeather + Discord + PWA)
+
+iPhone / PC から「天気コマンド」を実行し、結果を画面に表示しつつ Discord にも投稿する小型アプリです。  
+PWA 対応のため、iPhone ではホーム画面に追加して“アプリっぽく”使えます。
 
 ---
 
-## 4番の正体：「入口（UI）を増やす」だけ
+## できること
 
-今の構造はこうです：
-
- 入口：`ui`（PCiPhone画面）
- 中身：`webhook`（コマンド解析→OpenWeather→文章生成） 
-
-ここに 別の入口を追加するのが4番です。
+- `/ui`：コマンド入力UI（PC/iPhone）
+- `/webhook`：API（UI から POST を受けて天気取得 → JSON で返す）
+- OpenWeather で天気取得（地名→緯度経度→現在天気/予報）
+- 結果を Discord Webhook に投稿（任意）
+- PWA（manifest / Service Worker）
 
 ---
 
-## 例1：CLI（コマンドライン）UI
+## ざっくり構成
 
-### どうなる？
+- UI（/ui）＝「リモコン」  
+- /webhook ＝「司令室（頭脳）」  
+- OpenWeather ＝「気象データ提供」  
+- Discord ＝「掲示板」
 
-PowerShell  コマンドプロンプトでこう打てるようになります：
+UI は薄く、天気ロジックはすべてサーバー側（/webhook）に集約しています。
 
-```powershell
-python weather_cli.py 横浜天気
-python weather_cli.py 白馬寒さ
+---
+
+## エンドポイント
+
+- `GET /` → `/ui` にリダイレクト
+- `GET /ui` → UI（HTML）表示
+- `POST /webhook` → コマンド処理して JSON 返却
+- `GET /static/...` → manifest / sw.js / icons など配信
+- `GET /ping` → `pong`（死活確認）
+
+---
+
+## コマンド例
+
+入力例（スペース不要）：
+
+- `横浜天気`：今日の天気
+- `東京週間天気`：今後5日（OpenWeather無料枠の基本）
+- `千曲傘`：傘が必要か
+- `白馬寒さ`：体感温度ベースの寒さ
+- `箱根服装`：服装アドバイス
+- `東京`：都市名だけの場合は「天気」扱い（都市チップと同じ思想）
+
+---
+
+## /webhook の入出力
+
+### 入力（UI → サーバー）
+```json
+{ "from": "ui", "message": "横浜天気" }
+````
+
+### 出力（サーバー → UI）
+
+```json
+{
+  "status": "ok",
+  "mode": "today",
+  "city": "Yokohama",
+  "reply_text": "【天気】 Yokohama (JP) ...",
+  "sent_to_discord": true
+}
 ```
 
- 表示はターミナル上（ログにも使える）
- バッチ処理や自動化に強い（通知の前段階にも）
+---
 
-たとえ：リモコン（ui）に加えて、キーボード直打ち操作もできるようにする。
+## 内部処理（流れ）
+
+1. UI が `/webhook` に POST（JSON）
+2. `/webhook` が `parse_command()` で intent / city を決定
+3. `ow_geo()`：地名 → 緯度経度（Geocoding API）
+4. `ow_current()`：現在天気取得（/weather）
+5. 週間の場合は `ow_forecast()`（/forecast）
+6. `format_today()` 等で “人間向けの文章” に整形
+7. UI に JSON で返す
+8. `DISCORD_WEBHOOK_URL` があれば同文を Discord へ投稿
 
 ---
 
-## 例2：Discord側を“入力UI”にする（Bot化の第一歩）
+## UX（現状の工夫）
 
-### どうなる？
-
-Discordでこう打つと返ってくる：
-
- `横浜天気`
- `東京週間天気`
-
-今は `webhook` が「Discordに投稿する」だけですが、逆にDiscordから入力→結果返信にできます。
-
-たとえ：掲示板（Discord）が「表示だけ」から「操作パネル」になる。
+* 通信中はフルスクリーンローディング（「通信中…」）
+* オフライン検知で実行を止め、バナー表示
+* 12秒でタイムアウト（AbortController）
+* サーバー側は「例外でも JSON を返す」方針（UI の JSON パース事故を避ける）
+* Service Worker は **POST /webhook を絶対にキャッシュしない**（安全優先）
 
 ---
 
-## 例3：iPhoneショートカット専用入口（超実用）
+## PWA（manifest / sw.js）
 
-### どうなる？
+* `manifest.json`：アプリ名/アイコン/起動URL（start_url=/ui）
+* `sw.js`：UIシェルと静的ファイルをキャッシュ
 
-iPhoneのショートカットから1タップで
-
- 「今日の横浜天気」
- 「白馬の寒さ」
- 「傘いる？」
-
-が通知っぽく使える（結果を表示 or 読み上げ）。
-
-ショートカットは内部で結局 `webhook` を叩くだけなので、実装は軽いです。
+  * HTML は network-first
+  * 静的ファイルは cache-first
+  * **/webhook（POST）は触らない**
 
 ---
 
-## 例4：簡易HTML（超軽量UI）をもう1枚追加
+## 必要な環境変数
 
-今の `ui` は見た目がリッチで完成度高いですが、
-「会社PCで軽く開きたい」ときに、軽量版UIを別で持つ選択肢。
-
- `ui-lite`（ボタン少なめ、通信ログ重視）
- `ui`（リッチで見やすい）
-
-たとえ：フル装備のアプリと、緊急用の簡易画面。
+| 変数名                   | 必須 | 内容                    |
+| --------------------- | -: | --------------------- |
+| `OPENWEATHER_API_KEY` |  ✅ | OpenWeather API Key   |
+| `DISCORD_WEBHOOK_URL` | 任意 | Discord Webhook URL   |
+| `PORT`                | 任意 | Flask ポート（デフォルト 8787） |
 
 ---
 
-## なぜ“入口追加”が強いのか（メリット）
+## 起動（例）
 
- 中身（webhook）を触らずに使い勝手を増やせる
- バグが増えにくい（ロジックは同じ）
- 自動化（スケジューラ、通知）に繋げやすい
+```bash
+python weather_console_app_v2_fixed4.py
+# http://localhost:8787/ui
+```
 
----
+同一LANの iPhone から使う場合：
 
-## いまのあなたにおすすめの「4番」の現実的な順番
-
-あなたが気にしている
-
- GitHubOneDriveに置く
- `error_code` でUX強化
-
-をやった後、次の“入口追加”はこれが一番効きます：
-
-1. CLI UI（最短・実務的）
-2. iPhoneショートカット用の“固定URL固定コマンド”
-3. 余裕が出たら Discord入力（Bot化）
+* PC の IP が `192.168.x.x` なら `http://192.168.x.x:8787/ui`
 
 ---
 
-もしよければ、次の返答で
-「CLI版（weather_cli.py）」を実際に作った形で提示できます。
-（内部は `webhook` を叩くだけ、または Python の関数を直接呼ぶ2パターンあります。）
+## 将来拡張（アイデア）
+
+* 自動投稿（毎朝の天気を Discord へ）：最も手堅い通知
+* エラー表示の原因分岐（error_code を追加）
+* コマンド履歴（localStorage）
+* Web Push（PWA通知：難易度高め）
+
+````
+
+---
+
+## 図（Mermaid）
+
+### 1) ブロック図（構成）
+```mermaid
+flowchart LR
+  U[User<br/>PC / iPhone] -->|Tap / Input| UI[/GET /ui<br/>UI (PWA)/]
+  UI -->|fetch POST JSON| WH[/POST /webhook<br/>Flask API/]
+
+  WH -->|Geocoding| GEO[OpenWeather<br/>Geo API]
+  WH -->|Current/Forecast| OWM[OpenWeather<br/>Weather API]
+
+  WH -->|JSON reply_text| UI
+  WH -->|POST content| D[Discord Webhook<br/>(optional)]
+
+  UI --> SW[Service Worker<br/>sw.js]
+  UI --> M[manifest.json]
+  SW -. cache .-> UI
+  SW -. cache .-> M
+````
+
+### 2) シーケンス図（情報の流れ）
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor User
+  participant UI as /ui (Browser/PWA)
+  participant WH as /webhook (Flask)
+  participant GEO as OpenWeather Geo
+  participant OWM as OpenWeather Weather
+  participant DIS as Discord Webhook
+
+  User->>UI: コマンド入力/ボタン押下
+  UI->>WH: POST {from:"ui", message:"横浜天気"}
+  WH->>WH: parse_command()
+  WH->>GEO: 地名→緯度経度
+  GEO-->>WH: lat/lon
+  WH->>OWM: 天気取得（current/forecast）
+  OWM-->>WH: weather JSON
+  WH->>WH: format_*()で文章生成
+  WH-->>UI: JSON {reply_text: "..."}
+  alt DISCORD_WEBHOOK_URLが設定されている
+    WH->>DIS: POST {content:"..."}
+    DIS-->>WH: 2xx
+  end
+  UI-->>User: 画面表示（成功/失敗/ローディング）
+```
+
+---
+
+## 図（PlantUML）
+
+### 1) ブロック図（構成）
+
+```plantuml
+@startuml
+skinparam componentStyle rectangle
+
+actor "User\n(PC/iPhone)" as U
+rectangle "UI\nGET /ui\n(PWA)" as UI
+rectangle "Flask API\nPOST /webhook" as WH
+rectangle "OpenWeather\nGeo API" as GEO
+rectangle "OpenWeather\nWeather API" as OWM
+rectangle "Discord\nWebhook (optional)" as DIS
+rectangle "Service Worker\nsw.js" as SW
+rectangle "manifest.json" as MAN
+
+U --> UI : Tap / Input
+UI --> WH : fetch POST JSON
+
+WH --> GEO : Geocoding
+WH --> OWM : Current / Forecast
+
+WH --> UI : JSON reply_text
+WH --> DIS : POST content (if set)
+
+UI --> SW : register
+SW ..> UI : cache UI shell
+SW ..> MAN : cache manifest/icons
+@enduml
+```
+
+### 2) シーケンス図（情報の流れ）
+
+```plantuml
+@startuml
+autonumber
+actor User
+participant "UI (/ui)" as UI
+participant "Flask (/webhook)" as WH
+participant "OpenWeather Geo" as GEO
+participant "OpenWeather Weather" as OWM
+participant "Discord Webhook" as DIS
+
+User -> UI : input + click
+UI -> WH : POST {from:"ui", message:"横浜天気"}
+
+WH -> WH : parse_command()
+WH -> GEO : resolve city -> lat/lon
+GEO --> WH : lat/lon
+
+WH -> OWM : get current/forecast
+OWM --> WH : weather JSON
+
+WH -> WH : format_*() => reply_text
+WH --> UI : JSON {reply_text}
+
+alt DISCORD_WEBHOOK_URL is set
+  WH -> DIS : POST {content: reply_text}
+  DIS --> WH : 2xx
+end
+
+UI --> User : render result / error / loading
+@enduml
+```
+
