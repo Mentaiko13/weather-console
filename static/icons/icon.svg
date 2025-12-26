@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512">
+  <rect width="100%" height="100%" rx="96" ry="96" fill="#0b1f33"/>
+  <text x="50%" y="55%" text-anchor="middle" font-size="220">
+    ☀️
+  </text>
+  <text x="50%" y="75%" text-anchor="middle" font-size="160">
+    ☁️
+  </text>
+</svg>

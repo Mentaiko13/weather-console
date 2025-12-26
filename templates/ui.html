@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1b2a" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="icon" href="/static/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <!-- PWA -->
+  <link rel="manifest" href="/static/manifest.json">
+
+  <!-- iOS: ホーム画面追加・全画面化 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Weather Console">
+  <meta name="theme-color" content="#0b1220">
+
+
+  <!-- iOS: ホーム画面アイコン（manifestとは別で要求されることが多い） -->
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+
+  <!-- ついで：favicon（任意。404が気になるなら） -->
+  <link rel="icon" href="/static/icons/icon-192.png">
+
+  <script>
+  function setLoading(isLoading) {
+    const status = document.getElementById("status");
+    if (!status) return;
+
+    if (isLoading) {
+      status.textContent = "送信中…";
+      status.classList.add("loading");
+    } else {
+      status.textContent = "完了";
+      status.classList.remove("loading");
+    }
+  }
+  </script>
+
+
+  <title>Weather Console</title>
+
+  <style>
+    :root{
+      --bg1:#071725; --bg2:#0c2a3f; --card:rgba(255,255,255,.08);
+      --card2:rgba(255,255,255,.06);
+      --txt:rgba(255,255,255,.92); --muted:rgba(255,255,255,.65);
+      --accent:#4da3ff; --accent2:#2f7fe6; --ok:#33d18a; --warn:#ffd166;
+      --shadow: 0 18px 40px rgba(0,0,0,.35);
+      --radius: 22px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif;
+      color:var(--txt);
+      background: radial-gradient(1200px 600px at 15% 5%, #0f3a5e 0%, rgba(15,58,94,0) 55%),
+                  radial-gradient(900px 500px at 85% 30%, #1b5f4a 0%, rgba(27,95,74,0) 55%),
+                  linear-gradient(160deg, var(--bg1), var(--bg2));
+      min-height:100vh;
+      padding: 22px 18px 30px;
+    }
+    .top{
+      display:flex; align-items:flex-start; justify-content:space-between; gap:14px;
+      margin-bottom: 14px;
+    }
+    .title{
+      font-size:42px; font-weight:800; letter-spacing:.5px; line-height:1;
+      margin:0;
+    }
+    .subtitle{
+      margin-top:8px; color:var(--muted); font-size:14px;
+    }
+    .badge{
+      align-self:flex-start;
+      border:1px solid rgba(255,255,255,.2);
+      background: rgba(255,255,255,.06);
+      padding: 8px 12px;
+      border-radius: 999px;
+      color: rgba(255,255,255,.85);
+      font-size: 13px;
+      display:flex; gap:8px; align-items:center;
+    }
+    .dot{width:8px;height:8px;border-radius:99px;background:var(--ok);box-shadow:0 0 12px rgba(51,209,138,.8)}
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 14px;
+    }
+    @media (max-width: 980px){
+      .grid{grid-template-columns: 1fr}
+      .title{font-size:34px}
+    }
+
+    .card{
+      background: var(--card);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      padding: 16px;
+    }
+    .card h2{
+      margin:0 0 10px;
+      font-size: 18px;
+      letter-spacing:.2px;
+    }
+
+    .input{
+      width:100%;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.20);
+      padding: 14px 14px;
+      color: var(--txt);
+      font-size: 16px;
+      outline: none;
+    }
+    .input::placeholder{color:rgba(255,255,255,.45)}
+
+    .row{display:flex; flex-wrap:wrap; gap:10px; margin-top:10px}
+    .chip{
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.06);
+      color: rgba(255,255,255,.9);
+      padding: 10px 12px;
+      font-size: 14px;
+      cursor:pointer;
+      user-select:none;
+    }
+    .chip:hover{background: rgba(255,255,255,.10)}
+
+    .btnrow{display:flex; flex-wrap:wrap; gap:12px; margin-top:12px}
+    .btn{
+      flex: 1 1 140px;
+      min-width: 140px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: linear-gradient(180deg, rgba(77,163,255,.92), rgba(47,127,230,.92));
+      color: #03121f;
+      font-weight: 800;
+      letter-spacing:.2px;
+      padding: 14px 12px;
+      cursor:pointer;
+      box-shadow: 0 12px 28px rgba(77,163,255,.20);
+    }
+    .btn.secondary{
+      background: rgba(255,255,255,.10);
+      color: rgba(255,255,255,.92);
+      font-weight: 700;
+      box-shadow: none;
+    }
+    .btn:active{transform: translateY(1px)}
+    .hint{margin-top:10px; color:var(--muted); font-size:13px; line-height:1.5}
+
+    .resultbox{
+      background: var(--card2);
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 18px;
+      padding: 14px;
+      min-height: 220px;
+      white-space: pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 14px;
+    }
+    .actions{display:flex; gap:10px; justify-content:flex-end; margin-bottom:10px; flex-wrap:wrap}
+    .smallbtn{
+      border-radius: 14px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.10);
+      color: rgba(255,255,255,.92);
+      cursor:pointer;
+      display:flex; align-items:center; gap:8px;
+      font-weight: 700;
+    }
+    .status{
+      margin-top: 10px;
+      color: rgba(255,255,255,.85);
+      font-size: 13px;
+    }
+    .status.ok{color: var(--ok)}
+    .status.warn{color: var(--warn)}
+  </style>
+</head>
+
+<body>
+  <div class="top">
+    <div>
+      <h1 class="title">Weather Console</h1>
+      <div class="subtitle">iPhoneから “アプリっぽく” /webhook を叩くUI（Discordにも投稿されます）</div>
+    </div>
+    <div class="badge"><span class="dot"></span><span id="ready">Ready</span></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>コマンド入力</h2>
+      <input id="cmd" class="input" placeholder="例：横浜天気 / 東京週間天気 / 横浜服装 / 千曲傘（スペース無しでもOK）" />
+
+      <div class="row" id="chips"></div>
+
+      <div class="btnrow">
+        <button class="btn" onclick="quick('today')">今日の天気</button>
+        <button class="btn" onclick="quick('weekly')">週間天気</button>
+        <button class="btn" onclick="quick('umbrella')">傘いる？</button>
+        <button class="btn" onclick="quick('cold')">寒さ</button>
+        <button class="btn" onclick="quick('wear')">服装</button>
+        <button class="btn secondary" onclick="sendRaw()">そのまま送信</button>
+      </div>
+
+      <div class="hint">
+        コツ：都市チップ→ボタンで「横浜天気」みたいなコマンドを自動生成できます（スペース無しでもOK）
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="actions">
+        <button class="smallbtn" onclick="speak()">🔊 読み上げ</button>
+        <button class="smallbtn" onclick="copyText()">📋 コピー</button>
+      </div>
+
+      <h2>結果</h2>
+      <div id="result" class="resultbox">ここに結果が表示されます。</div>
+      <div id="status" class="status ok">成功：/webhook にPOSTします（Discordにも投稿されます）</div>
+    </div>
+  </div>
+
+  <script>
+    // ▼ ここは「あなたが追加したい場所」を増やすだけでOK
+    const PLACES = [
+      "横浜","東京","箱根","白馬","志賀高原","ガーラ湯沢","千曲","船橋","幕張","福岡",
+      "栂池","みなとみらい","保土ヶ谷","平塚"
+    ];
+
+    const chipsEl = document.getElementById("chips");
+    const cmdEl = document.getElementById("cmd");
+    const resultEl = document.getElementById("result");
+    const statusEl = document.getElementById("status");
+
+    function renderChips(){
+      chipsEl.innerHTML = "";
+      PLACES.forEach(p=>{
+        const b = document.createElement("button");
+        b.className = "chip";
+        b.textContent = p;
+        b.onclick = ()=>{ cmdEl.value = p; cmdEl.focus(); };
+        chipsEl.appendChild(b);
+      });
+    }
+    renderChips();
+
+    // Enterで送信
+    cmdEl.addEventListener("keydown", (e)=>{
+      if(e.key === "Enter"){
+        e.preventDefault();
+        sendRaw();
+      }
+    });
+
+    function buildCommand(city, mode){
+      // スペース無しでも解析できる前提のコマンド
+      if(mode==="today") return `${city}天気`;
+      if(mode==="weekly") return `${city}週間天気`;
+      if(mode==="umbrella") return `${city}傘`;
+      if(mode==="cold") return `${city}寒さ`;
+      if(mode==="wear") return `${city}服装`;
+      return city;
+    }
+
+    async function postWebhook(message){
+      const payload = { from: "ui", message };
+      statusEl.textContent = "送信中...";
+      statusEl.className = "status warn";
+
+      try{
+        const res = await fetch("/webhook", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        // Flask側が reply_text を返す設計ならそれを優先表示
+        const shown = (data && (data.reply_text || data.result_text)) ? (data.reply_text || data.result_text) : JSON.stringify(data, null, 2);
+        resultEl.textContent = shown;
+
+        statusEl.textContent = "成功：iPhone UIに表示 + Discordにも投稿済み";
+        statusEl.className = "status ok";
+      }catch(err){
+        resultEl.textContent = String(err);
+        statusEl.textContent = "失敗：通信エラー（/webhook に届いていません）";
+        statusEl.className = "status warn";
+      }
+    }
+
+    function quick(mode){
+      const city = (cmdEl.value || "").trim();
+      if(!city){
+        statusEl.textContent = "都市名を入力してください（例：横浜）";
+        statusEl.className = "status warn";
+        cmdEl.focus();
+        return;
+      }
+      postWebhook(buildCommand(city, mode));
+    }
+
+    function sendRaw(){
+      const msg = (cmdEl.value || "").trim();
+      if(!msg){
+        statusEl.textContent = "送る文字が空です";
+        statusEl.className = "status warn";
+        cmdEl.focus();
+        return;
+      }
+      postWebhook(msg);
+    }
+
+    function copyText(){
+      const t = resultEl.textContent || "";
+      navigator.clipboard.writeText(t).then(()=>{
+        statusEl.textContent = "コピーしました";
+        statusEl.className = "status ok";
+      });
+    }
+
+    function speak(){
+      const t = resultEl.textContent || "";
+      if(!t) return;
+      if(!("speechSynthesis" in window)){
+        statusEl.textContent = "このブラウザは読み上げに非対応です";
+        statusEl.className = "status warn";
+        return;
+      }
+      const u = new SpeechSynthesisUtterance(t);
+      u.lang = "ja-JP";
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    }
+
+    // Service Worker 登録（/static/sw.js を想定）
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/static/sw.js").catch(()=>{});
+    }
+  </script>
+</body>
+</html>
